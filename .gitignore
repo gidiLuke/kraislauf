@@ -1,0 +1,101 @@
+# Project specific
+.env
+.env.*
+!.env.example
+!.env.production.example
+.pnpm-store/
+
+# Editor files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+.idea/
+
+### Frontend (Node.js/Next.js) ###
+# Logs
+frontend/logs
+frontend/*.log
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+
+# Dependency directories
+frontend/node_modules/
+
+# TypeScript cache
+frontend/*.tsbuildinfo
+
+# Testing
+frontend/coverage/
+
+# Environment variables
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# ESLint and style caches
+frontend/.eslintcache
+frontend/.stylelintcache
+
+# Cache directories
+frontend/.cache/
+frontend/.parcel-cache/
+
+# Package files
+frontend/*.tgz
+
+# Build directories
+frontend/dist/
+
+# Temporary files
+frontend/.temp/
+
+### Backend (Python/FastAPI) ###
+# Byte-compiled / optimized / DLL files
+backend/**/__pycache__/
+backend/**/*.py[cod]
+backend/**/*$py.class
+
+# Virtual environment
+backend/venv/
+backend/.venv/
+
+# Distribution / packaging
+backend/dist/
+backend/build/
+backend/*.egg-info/
+
+# Unit test / coverage reports
+backend/.pytest_cache/
+backend/htmlcov/
+backend/.coverage
+backend/coverage.xml
+
+# Local development
+backend/.env.local
+backend/.env.development.local
+backend/.env.test.local
+backend/.env.production.local
+
+# Infrastructure as Code
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfvars
+
+# Docker
+.docker/
+
+# Miscellaneous
+**/.DS_Store
+**/Thumbs.db

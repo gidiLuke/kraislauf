@@ -1,0 +1,27 @@
+{
+    "name": "kraislauf",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "target": "ide",
+        "context": ".."
+    },
+    "remoteUser": "root",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/root/app,type=bind",
+    "workspaceFolder": "/home/root/app",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "charliermarsh.ruff",
+                "esbenp.prettier-vscode",
+                "ms-vscode.vscode-typescript-next"
+            ],
+            "settings": {
+                "python.defaultInterpreterPath": "/opt/venv/bin/python",
+                "editor.formatOnSave": true,
+                "typescript.tsdk": "node_modules/typescript/lib"
+            }
+        }
+    },
+    "postCreateCommand": "source backend/.venv/bin/activate && pre-commit install && pnpm install"
+}
