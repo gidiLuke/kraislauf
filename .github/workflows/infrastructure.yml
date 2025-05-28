@@ -1,0 +1,219 @@
+name: Infrastructure Provisioning
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infra/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'infra/**'
+  release:
+    types: [published]
+  workflow_dispatch:  # Allows manual triggering
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prd
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write  # Required for OIDC authentication with Azure
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./infra
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.9.1
+
+      - name: Initialize OpenTofu
+        run: tofu init -backend=false
+
+      - name: Validate OpenTofu configuration
+        run: tofu validate
+
+      - name: Format check
+        run: tofu fmt -check
+
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: ./infra
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.9.1
+
+      - name: Configure Azure credentials
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Initialize OpenTofu
+        run: |
+          chmod +x ./backend-config.sh
+          ./backend-config.sh dev
+          tofu init -backend-config=backend-dev.tfvars
+
+      - name: Create plan
+        run: tofu plan -out=tfplan
+        
+      - name: Upload plan
+        uses: actions/upload-artifact@v3
+        with:
+          name: tfplan
+          path: ./infra/tfplan
+
+      - name: Show plan
+        run: tofu show -json tfplan > plan.json
+
+      - name: Comment PR
+        uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const plan = JSON.parse(fs.readFileSync('./infra/plan.json', 'utf8'));
+            
+            let summary = "### OpenTofu Plan Summary\n\n";
+            
+            if (plan.resource_changes) {
+              const changes = {
+                add: 0,
+                change: 0,
+                destroy: 0
+              };
+              
+              plan.resource_changes.forEach(change => {
+                switch(change.change.actions[0]) {
+                  case 'create':
+                    changes.add++;
+                    break;
+                  case 'update':
+                    changes.change++;
+                    break;
+                  case 'delete':
+                    changes.destroy++;
+                    break;
+                }
+              });
+              
+              summary += `- Resources to add: ${changes.add}\n`;
+              summary += `- Resources to change: ${changes.change}\n`;
+              summary += `- Resources to destroy: ${changes.destroy}\n\n`;
+            } else {
+              summary += "No changes to apply.\n\n";
+            }
+            
+            summary += "For details, check the plan artifact in the workflow run.";
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
+
+  apply-dev:
+    name: Apply to Dev
+    runs-on: ubuntu-latest
+    needs: validate
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev')
+    environment: dev
+    defaults:
+      run:
+        working-directory: ./infra
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.9.1
+
+      - name: Configure Azure credentials
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Initialize OpenTofu
+        run: |
+          chmod +x ./backend-config.sh
+          ./backend-config.sh dev
+          tofu init -backend-config=backend-dev.tfvars
+
+      - name: Apply changes
+        run: |
+          export TF_VAR_environment="dev"
+          tofu apply -auto-approve
+
+  apply-prd:
+    name: Apply to Production
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.environment == 'prd')
+    environment: prd
+    defaults:
+      run:
+        working-directory: ./infra
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.9.1
+
+      - name: Configure Azure credentials
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Initialize OpenTofu
+        run: |
+          chmod +x ./backend-config.sh
+          ./backend-config.sh prd
+          tofu init -backend-config=backend-prd.tfvars
+
+      - name: Apply changes
+        run: |
+          export TF_VAR_environment="prd"
+          tofu apply -auto-approve

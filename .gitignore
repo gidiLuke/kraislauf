@@ -88,10 +88,15 @@ backend/.env.production.local
 
 # Infrastructure as Code
 .terraform/
+.tofu/
 .terraform.lock.hcl
+.tofuversion
 terraform.tfstate
 terraform.tfstate.backup
 *.tfvars
+backend-*.tfvars
+*-plan.out
+*.plan.json
 
 # Docker
 .docker/

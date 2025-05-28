@@ -1,13 +1,13 @@
 variable "resource_group_name" {
-  description = "Name of the resource group"
+  description = "Base name of the resource group (will be suffixed with environment)"
   type        = string
-  default     = "kraislauf-rg"
+  default     = "kraislauf"
 }
 
 variable "location" {
   description = "Azure region to deploy resources"
   type        = string
-  default     = "eastus"
+  default     = "germanywestcentral"
 }
 
 variable "project_name" {
@@ -17,9 +17,14 @@ variable "project_name" {
 }
 
 variable "environment" {
-  description = "Environment (dev, test, prod)"
+  description = "Environment (dev, prd)"
   type        = string
   default     = "dev"
+
+  validation {
+    condition     = contains(["dev", "prd"], var.environment)
+    error_message = "Environment must be either 'dev' or 'prd'."
+  }
 }
 
 variable "tags" {
@@ -27,7 +32,7 @@ variable "tags" {
   type        = map(string)
   default = {
     Project     = "kraislauf"
-    Environment = "Development"
+    Environment = var.environment == "dev" ? "Development" : "Production"
     ManagedBy   = "OpenTofu"
   }
 }

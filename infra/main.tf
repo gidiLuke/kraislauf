@@ -6,64 +6,99 @@ terraform {
     }
   }
   required_version = ">= 1.0"
+
+  # Backend configuration will be provided via -backend-config flag during initialization
+  # Always use the remote state backend to ensure consistent state management
+  backend "azurerm" {}
 }
 
 provider "azurerm" {
   features {}
 }
 
+# Local variables for environment-specific configurations
+locals {
+  environment_config = {
+    dev = {
+      sku_tier     = "Standard"
+      sku_size     = "Standard"
+      acr_sku      = "Basic"
+      min_replicas = 1
+      max_replicas = 3
+    }
+    prd = {
+      sku_tier     = "Standard"
+      sku_size     = "Standard"
+      acr_sku      = "Standard"
+      min_replicas = 2
+      max_replicas = 5
+    }
+  }
+
+  # Use the current environment configuration
+  config = local.environment_config[var.environment]
+
+  # Set common name prefix with environment
+  name_prefix = "${var.project_name}-${var.environment}"
+
+  # Update tags with current environment
+  tags = merge(var.tags, {
+    Environment = var.environment == "dev" ? "Development" : "Production"
+  })
+}
+
 resource "azurerm_resource_group" "rg" {
-  name     = var.resource_group_name
+  name     = "${local.name_prefix}-rg"
   location = var.location
-  tags     = var.tags
+  tags     = local.tags
 }
 
 # Static Web App for frontend
 resource "azurerm_static_site" "frontend" {
-  name                = "${var.project_name}-web"
+  name                = "${local.name_prefix}-web"
   resource_group_name = azurerm_resource_group.rg.name
   location            = var.location
-  sku_tier            = "Standard"
-  sku_size            = "Standard"
-  tags                = var.tags
+  sku_tier            = local.config.sku_tier
+  sku_size            = local.config.sku_size
+  tags                = local.tags
 }
 
 # Container Registry for backend Docker images
 resource "azurerm_container_registry" "acr" {
-  name                = replace("${var.project_name}acr", "-", "")
+  name                = replace("${var.project_name}${var.environment}acr", "-", "")
   resource_group_name = azurerm_resource_group.rg.name
   location            = var.location
-  sku                 = "Basic"
+  sku                 = local.config.acr_sku
   admin_enabled       = true
-  tags                = var.tags
+  tags                = local.tags
 }
 
 # Log Analytics workspace for Container App
 resource "azurerm_log_analytics_workspace" "logs" {
-  name                = "${var.project_name}-logs"
+  name                = "${local.name_prefix}-logs"
   resource_group_name = azurerm_resource_group.rg.name
   location            = var.location
   sku                 = "PerGB2018"
   retention_in_days   = 30
-  tags                = var.tags
+  tags                = local.tags
 }
 
 # Container App Environment
 resource "azurerm_container_app_environment" "env" {
-  name                       = "${var.project_name}-env"
+  name                       = "${local.name_prefix}-env"
   resource_group_name        = azurerm_resource_group.rg.name
   location                   = var.location
   log_analytics_workspace_id = azurerm_log_analytics_workspace.logs.id
-  tags                       = var.tags
+  tags                       = local.tags
 }
 
 # Container App for backend
 resource "azurerm_container_app" "backend" {
-  name                         = "${var.project_name}-api"
+  name                         = "${local.name_prefix}-api"
   container_app_environment_id = azurerm_container_app_environment.env.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
-  tags                         = var.tags
+  tags                         = local.tags
 
   template {
     container {
@@ -79,12 +114,12 @@ resource "azurerm_container_app" "backend" {
 
       env {
         name  = "LOG_LEVEL"
-        value = "info"
+        value = var.environment == "dev" ? "debug" : "info"
       }
     }
 
-    min_replicas = 1
-    max_replicas = 5
+    min_replicas = local.config.min_replicas
+    max_replicas = local.config.max_replicas
   }
 
   ingress {
