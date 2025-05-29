@@ -6,14 +6,41 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# Check if Azure CLI is installed and user is logged in
+if ! command -v az &>/dev/null; then
+    echo "Azure CLI is not installed. Please install it first."
+    echo "Visit: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli"
+    exit 1
+fi
+
+# Verify Azure CLI authentication
+if ! az account show &>/dev/null; then
+    echo "Not logged in to Azure. Please run 'az login' first."
+    exit 1
+fi
+
 # Global configuration variables
 PROJECT_NAME="kraislauf"
 LOCATION="germanywestcentral"
 STORAGE_SKU="Standard_LRS"
+RANDOM_SUFFIX="3d15" # Random suffix for storage account to avoid conflicts
 
-# Get Azure tenant and subscription information once
+# Get Azure tenant and subscription information once after verifying authentication
 AZURE_TENANT_ID=$(az account show --query tenantId -o tsv)
 AZURE_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+
+# Check if GitHub CLI is installed
+if ! command -v gh &>/dev/null; then
+    echo "GitHub CLI (gh) is not installed. Please install it to configure GitHub environments."
+    echo "Installation instructions: https://github.com/cli/cli#installation"
+    exit 1
+fi
+
+# Check if authenticated with GitHub
+if ! gh auth status &>/dev/null; then
+    echo "Not authenticated with GitHub. Please run 'gh auth login' first."
+    exit 1
+fi
 
 # Ensure environment parameter is provided
 if [ -z "$1" ]; then
@@ -30,19 +57,9 @@ if [[ "$ENVIRONMENT" != "dev" && "$ENVIRONMENT" != "prd" ]]; then
 fi
 
 echo "Configuring backend for $ENVIRONMENT environment..."
-if [ -f ".env.infra.${ENVIRONMENT}" ]; then
-    # shellcheck disable=SC1090
-    source ".env.infra.${ENVIRONMENT}"
-else
-    RANDOM_SUFFIX=$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | fold -w 4 | head -n1)
-    STORAGE_ACCOUNT_NAME="st${PROJECT_NAME}${RANDOM_SUFFIX}"
-    echo "STORAGE_ACCOUNT_NAME=${STORAGE_ACCOUNT_NAME}" >".env.infra.${ENVIRONMENT}"
-fi
+STORAGE_ACCOUNT_NAME="st${PROJECT_NAME}infra${RANDOM_SUFFIX}"
 RESOURCE_GROUP_NAME="rg-${PROJECT_NAME}-infra"
 CONTAINER_NAME="tfstate"
-
-# Save the generated storage account name to a local file for reference with environment postfix
-echo "STORAGE_ACCOUNT_NAME=${STORAGE_ACCOUNT_NAME}" >".env.infra.${ENVIRONMENT}"
 
 # Check if resource group exists
 RG_EXISTS=$(az group exists --name "${RESOURCE_GROUP_NAME}" --output tsv)
@@ -52,10 +69,10 @@ if [[ "${RG_EXISTS}" == "false" ]]; then
     az group create --name "${RESOURCE_GROUP_NAME}" --location "${LOCATION}" --tags "Purpose=Terraform State" "Environment=All"
 fi
 
-# Check if storage account exists
-STORAGE_EXISTS=$(az storage account check-name --name "${STORAGE_ACCOUNT_NAME}" --query "nameAvailable" --output tsv)
+# Check if storage account exists (nameAvailable=true means it doesn't exist)
+STORAGE_NAME_AVAILABLE=$(az storage account check-name --name "${STORAGE_ACCOUNT_NAME}" --query "nameAvailable" --output tsv)
 
-if [[ "${STORAGE_EXISTS}" == "true" ]]; then
+if [[ "${STORAGE_NAME_AVAILABLE}" == "true" ]]; then
     echo "Creating storage account: ${STORAGE_ACCOUNT_NAME}"
     # Create storage account with enhanced security settings but without network restrictions initially
     az storage account create \
@@ -64,13 +81,11 @@ if [[ "${STORAGE_EXISTS}" == "true" ]]; then
         --location "${LOCATION}" \
         --sku "${STORAGE_SKU}" \
         --encryption-services blob \
-        --enable-infrastructure-encryption \
+        --require-infrastructure-encryption true \
         --min-tls-version "TLS1_2" \
         --allow-blob-public-access false \
-        --auth-mode login \
-        --default-action-for-keys deny \
         --https-only true \
-        --tags "Purpose=Terraform State" "Environment=All"
+        --tags "Environment=All"
 
     # Enable versioning and soft delete for data protection
     az storage account blob-service-properties update \
@@ -78,13 +93,25 @@ if [[ "${STORAGE_EXISTS}" == "true" ]]; then
         --resource-group "${RESOURCE_GROUP_NAME}" \
         --enable-versioning true \
         --enable-delete-retention true \
-        --delete-retention-days 7
+        --delete-retention-days 30
 fi
 
-# Configure RBAC for GitHub OIDC
-echo "Configuring RBAC for GitHub OIDC integration..."
-GITHUB_REPO_OWNER="$(git config --get remote.origin.url | sed -n 's/.*github.com[:/]\([^/]*\).*/\1/p')"
-GITHUB_REPO_NAME="$(git config --get remote.origin.url | sed -n 's/.*\/\([^/]*\)\.git$/\1/p')"
+# Create container using Azure CLI auth
+echo "Creating blob container if it doesn't exist..."
+# Check if container exists and create if needed
+CONTAINER_EXISTS=$(az storage container exists --name "${CONTAINER_NAME}" --account-name "${STORAGE_ACCOUNT_NAME}" --auth-mode login --query "exists" --output tsv 2>/dev/null || echo "false")
+
+if [[ "${CONTAINER_EXISTS}" == "false" ]]; then
+    echo "Creating container: ${CONTAINER_NAME}"
+    az storage container create --name "${CONTAINER_NAME}" --account-name "${STORAGE_ACCOUNT_NAME}" --auth-mode login
+fi
+
+# Now that the container is created, apply network restrictions
+echo "Applying network restrictions to the storage account..."
+az storage account update \
+    --name "${STORAGE_ACCOUNT_NAME}" \
+    --resource-group "${RESOURCE_GROUP_NAME}" \
+    --default-action "Deny"
 
 # Create an Entra ID group for infrastructure administrators
 INFRA_ADMIN_GROUP_NAME="${PROJECT_NAME}_infra_admins"
@@ -110,6 +137,11 @@ else
     echo "Group ${INFRA_ADMIN_GROUP_NAME} already exists with ID: ${GROUP_ID}"
 fi
 
+# Configure RBAC for GitHub OIDC
+echo "Configuring RBAC for GitHub OIDC integration..."
+GITHUB_REPO_OWNER="$(git config --get remote.origin.url | sed -n 's/.*github.com[:/]\([^/]*\).*/\1/p')"
+GITHUB_REPO_NAME="$(git config --get remote.origin.url | sed -n 's/.*\/\([^/]*\)\.git$/\1/p')"
+
 if [[ -z "${GITHUB_REPO_OWNER}" || -z "${GITHUB_REPO_NAME}" ]]; then
     echo "WARNING: Could not automatically detect GitHub repository info."
     echo "For OIDC auth to work, manually set up the federated identity credentials."
@@ -133,11 +165,16 @@ else
     echo "Assigning Storage Blob Data Contributor role to managed identity..."
     STORAGE_ID=$(az storage account show --name "${STORAGE_ACCOUNT_NAME}" --resource-group "${RESOURCE_GROUP_NAME}" --query "id" --output tsv)
 
-    az role assignment create \
-        --assignee-object-id "${IDENTITY_PRINCIPAL_ID}" \
-        --assignee-principal-type "ServicePrincipal" \
-        --role "Storage Blob Data Contributor" \
-        --scope "${STORAGE_ID}"
+    # Check if Storage Blob Data Contributor role assignment already exists
+    ROLE_EXISTS=$(az role assignment list --assignee "${IDENTITY_PRINCIPAL_ID}" --scope "${STORAGE_ID}" --role "Storage Blob Data Contributor" --query "[].id" --output tsv)
+
+    if [[ -z "${ROLE_EXISTS}" ]]; then
+        az role assignment create \
+            --assignee-object-id "${IDENTITY_PRINCIPAL_ID}" \
+            --assignee-principal-type "ServicePrincipal" \
+            --role "Storage Blob Data Contributor" \
+            --scope "${STORAGE_ID}"
+    fi
 
     # Set up federated identity credential for GitHub Actions
     echo "Setting up federated identity credential for GitHub Actions..." # Check if credential already exists
@@ -163,23 +200,6 @@ else
     echo "================================================"
 fi
 
-# Create container using Azure CLI auth
-echo "Creating blob container if it doesn't exist..."
-# Check if container exists and create if needed
-CONTAINER_EXISTS=$(az storage container exists --name "${CONTAINER_NAME}" --account-name "${STORAGE_ACCOUNT_NAME}" --auth-mode login --query "exists" --output tsv 2>/dev/null || echo "false")
-
-if [[ "${CONTAINER_EXISTS}" == "false" ]]; then
-    echo "Creating container: ${CONTAINER_NAME}"
-    az storage container create --name "${CONTAINER_NAME}" --account-name "${STORAGE_ACCOUNT_NAME}" --auth-mode login
-fi
-
-# Now that the container is created, apply network restrictions
-echo "Applying network restrictions to the storage account..."
-az storage account update \
-    --name "${STORAGE_ACCOUNT_NAME}" \
-    --resource-group "${RESOURCE_GROUP_NAME}" \
-    --default-action "Deny"
-
 # Create backend configuration for specific environment
 cat >backend-${ENVIRONMENT}.tfvars <<EOF
 resource_group_name  = "${RESOURCE_GROUP_NAME}"
@@ -194,3 +214,52 @@ EOF
 
 echo "Backend configuration for ${ENVIRONMENT} created at backend-${ENVIRONMENT}.tfvars"
 echo "Use 'tofu init -backend-config=backend-${ENVIRONMENT}.tfvars' to initialize backend"
+
+# GitHub Environment Configuration
+echo "Configuring GitHub environment: ${ENVIRONMENT}"
+# Get the current repository
+REPO_URL=$(git config --get remote.origin.url)
+if [[ -z "${REPO_URL}" ]]; then
+    echo "Could not determine GitHub repository. Make sure you're in a git repository with a GitHub remote."
+    exit 1
+fi
+
+# Extract owner and repo name
+if [[ "${REPO_URL}" =~ github\.com[:/]([^/]+)/([^/.]+) ]]; then
+    REPO_OWNER="${BASH_REMATCH[1]}"
+    REPO_NAME="${BASH_REMATCH[2]}"
+else
+    echo "Could not parse GitHub repository information from URL: ${REPO_URL}"
+    exit 1
+fi
+
+FULL_REPO="${REPO_OWNER}/${REPO_NAME}"
+
+# Create or update the environment in GitHub
+echo "Creating/updating environment '${ENVIRONMENT}' in GitHub repository ${FULL_REPO}"
+
+# Check if environment exists
+if ! gh api "repos/${FULL_REPO}/environments/${ENVIRONMENT}" &>/dev/null; then
+    echo "Creating new environment: ${ENVIRONMENT}"
+else
+    echo "Environment ${ENVIRONMENT} already exists, updating secrets"
+fi
+
+# Set required secrets for the environment
+echo "Setting GitHub secrets for environment: ${ENVIRONMENT}"
+
+gh secret set AZURE_CLIENT_ID --env "${ENVIRONMENT}" --body "${IDENTITY_CLIENT_ID}"
+gh secret set AZURE_TENANT_ID --env "${ENVIRONMENT}" --body "${AZURE_TENANT_ID}"
+gh secret set AZURE_SUBSCRIPTION_ID --env "${ENVIRONMENT}" --body "${AZURE_SUBSCRIPTION_ID}"
+
+# Set environment variables needed for Terraform/OpenTofu
+echo "Setting GitHub environment variables for: ${ENVIRONMENT}"
+gh variable set TF_VAR_project_name --env "${ENVIRONMENT}" --body "${PROJECT_NAME}"
+gh variable set TF_VAR_location --env "${ENVIRONMENT}" --body "${LOCATION}"
+gh variable set TF_VAR_environment --env "${ENVIRONMENT}" --body "${ENVIRONMENT}"
+
+# Set the storage account name as a variable (useful for other workflows)
+gh variable set STORAGE_ACCOUNT_NAME --env "${ENVIRONMENT}" --body "${STORAGE_ACCOUNT_NAME}"
+
+echo "GitHub environment ${ENVIRONMENT} configured successfully with required secrets"
+echo "You can now run your workflows targeting the ${ENVIRONMENT} environment"

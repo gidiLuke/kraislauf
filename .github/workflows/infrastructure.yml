@@ -11,7 +11,12 @@ on:
       - 'infra/**'
   release:
     types: [published]
-  workflow_dispatch:  # Allows manual triggering
+  workflow_dis      - name: Apply changes
+        env:
+          TF_VAR_environment: ${{ vars.TF_VAR_environment }}
+          TF_VAR_project_name: ${{ vars.TF_VAR_project_name }}
+          TF_VAR_location: ${{ vars.TF_VAR_location }}
+        run: tofu apply -auto-approveh:  # Allows manual triggering
     inputs:
       environment:
         description: 'Environment to deploy to'
@@ -80,8 +85,8 @@ jobs:
 
       - name: Initialize OpenTofu
         run: |
-          chmod +x ./backend-config.sh
-          ./backend-config.sh dev
+          chmod +x ./setup_iac_backend.sh
+          ./setup_iac_backend.sh dev
           tofu init -backend-config=backend-dev.tfvars
 
       - name: Create plan
@@ -172,13 +177,15 @@ jobs:
 
       - name: Initialize OpenTofu
         run: |
-          chmod +x ./backend-config.sh
-          ./backend-config.sh dev
+          chmod +x ./setup_iac_backend.sh
+          ./setup_iac_backend.sh dev
           tofu init -backend-config=backend-dev.tfvars
 
       - name: Apply changes
         run: |
-          export TF_VAR_environment="dev"
+          export TF_VAR_environment="${{ vars.TF_VAR_environment }}"
+          export TF_VAR_project_name="${{ vars.TF_VAR_project_name }}"
+          export TF_VAR_location="${{ vars.TF_VAR_location }}"
           tofu apply -auto-approve
 
   apply-prd:
@@ -209,8 +216,8 @@ jobs:
 
       - name: Initialize OpenTofu
         run: |
-          chmod +x ./backend-config.sh
-          ./backend-config.sh prd
+          chmod +x ./setup_iac_backend.sh
+          ./setup_iac_backend.sh prd
           tofu init -backend-config=backend-prd.tfvars
 
       - name: Apply changes
