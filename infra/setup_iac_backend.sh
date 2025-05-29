@@ -155,6 +155,10 @@ else
     if [[ "${IDENTITY_EXISTS}" == "false" ]]; then
         echo "Creating managed identity for GitHub Actions..."
         az identity create --name "${IDENTITY_NAME}" --resource-group "${RESOURCE_GROUP_NAME}" --location "${LOCATION}"
+        # Wait for the managed identity to propagate in Azure AD
+        echo "Waiting for managed identity to propagate in Azure AD (30 seconds)..."
+        sleep 30
+
     fi
 
     # Get identity client ID and principal ID
@@ -166,14 +170,18 @@ else
     STORAGE_ID=$(az storage account show --name "${STORAGE_ACCOUNT_NAME}" --resource-group "${RESOURCE_GROUP_NAME}" --query "id" --output tsv)
 
     # Check if Storage Blob Data Contributor role assignment already exists
-    ROLE_EXISTS=$(az role assignment list --assignee "${IDENTITY_PRINCIPAL_ID}" --scope "${STORAGE_ID}" --role "Storage Blob Data Contributor" --query "[].id" --output tsv)
+    echo "Checking for existing role assignments..."
+    ROLE_EXISTS=$(az role assignment list --assignee-object-id "${IDENTITY_PRINCIPAL_ID}" --assignee-principal-type "ServicePrincipal" --scope "${STORAGE_ID}" --role "Storage Blob Data Contributor" --query "[].id" --output tsv 2>/dev/null || echo "")
 
     if [[ -z "${ROLE_EXISTS}" ]]; then
+        echo "Creating new role assignment..."
         az role assignment create \
             --assignee-object-id "${IDENTITY_PRINCIPAL_ID}" \
             --assignee-principal-type "ServicePrincipal" \
             --role "Storage Blob Data Contributor" \
             --scope "${STORAGE_ID}"
+    else
+        echo "Role assignment already exists"
     fi
 
     # Set up federated identity credential for GitHub Actions
