@@ -273,7 +273,7 @@ gh variable set TF_VAR_location --env "${ENVIRONMENT}" --body "${LOCATION}"
 gh variable set TF_VAR_environment --env "${ENVIRONMENT}" --body "${ENVIRONMENT}"
 
 # Set the storage account name as a variable (useful for other workflows)
-gh variable set STORAGE_ACCOUNT_NAME --env "${ENVIRONMENT}" --body "${STORAGE_ACCOUNT_NAME}"
+gh variable set INFRA_STORAGE_ACCOUNT_NAME --env "${ENVIRONMENT}" --body "${STORAGE_ACCOUNT_NAME}"
 
 echo "GitHub environment ${ENVIRONMENT} configured successfully with required secrets"
 echo "You can now run your workflows targeting the ${ENVIRONMENT} environment"
