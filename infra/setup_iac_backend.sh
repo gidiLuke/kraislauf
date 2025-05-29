@@ -208,20 +208,20 @@ else
     echo "================================================"
 fi
 
-# Create backend configuration for specific environment
-cat >backend-${ENVIRONMENT}.tfvars <<EOF
+# Create backend configuration only for local development
+cat >backend-${ENVIRONMENT}-local.tfvars <<EOF
 resource_group_name  = "${RESOURCE_GROUP_NAME}"
 storage_account_name = "${STORAGE_ACCOUNT_NAME}"
 container_name       = "${CONTAINER_NAME}"
 key                  = "terraform.${ENVIRONMENT}.tfstate"
-use_oidc             = true
+use_oidc             = false
 use_azuread_auth     = true
 subscription_id      = "${AZURE_SUBSCRIPTION_ID}"
 tenant_id            = "${AZURE_TENANT_ID}"
 EOF
 
-echo "Backend configuration for ${ENVIRONMENT} created at backend-${ENVIRONMENT}.tfvars"
-echo "Use 'tofu init -backend-config=backend-${ENVIRONMENT}.tfvars' to initialize backend"
+echo "Backend configuration for ${ENVIRONMENT} created at backend-${ENVIRONMENT}-local.tfvars"
+echo "Use 'tofu init -backend-config=backend-${ENVIRONMENT}-local.tfvars' to initialize backend locally"
 
 # GitHub Environment Configuration
 echo "Configuring GitHub environment: ${ENVIRONMENT}"
@@ -274,6 +274,13 @@ gh variable set TF_VAR_environment --env "${ENVIRONMENT}" --body "${ENVIRONMENT}
 
 # Set the storage account name as a variable (useful for other workflows)
 gh variable set INFRA_STORAGE_ACCOUNT_NAME --env "${ENVIRONMENT}" --body "${STORAGE_ACCOUNT_NAME}"
+
+# Set backend configuration values as GitHub variables for CI/CD
+echo "Setting GitHub variables for backend configuration..."
+gh variable set TF_BACKEND_RESOURCE_GROUP --env "${ENVIRONMENT}" --body "${RESOURCE_GROUP_NAME}"
+gh variable set TF_BACKEND_STORAGE_ACCOUNT --env "${ENVIRONMENT}" --body "${STORAGE_ACCOUNT_NAME}"
+gh variable set TF_BACKEND_CONTAINER --env "${ENVIRONMENT}" --body "${CONTAINER_NAME}"
+gh variable set TF_BACKEND_KEY --env "${ENVIRONMENT}" --body "terraform.${ENVIRONMENT}.tfstate"
 
 echo "GitHub environment ${ENVIRONMENT} configured successfully with required secrets"
 echo "You can now run your workflows targeting the ${ENVIRONMENT} environment"

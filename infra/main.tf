@@ -7,8 +7,9 @@ terraform {
   }
   required_version = ">= 1.0"
 
-  # Backend configuration will be provided via -backend-config flag during initialization
-  # Always use the remote state backend to ensure consistent state management
+  # Backend configuration will be provided via -backend-config flag during initialization.
+  # Use 'tofu init -backend-config=backend-{dev/run}-local.tfvars' to initialize backend locally.
+  # Always use the remote state backend to ensure consistent state management.
   backend "azurerm" {}
 }
 
