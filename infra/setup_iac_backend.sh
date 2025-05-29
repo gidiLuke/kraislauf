@@ -249,6 +249,12 @@ echo "Creating/updating environment '${ENVIRONMENT}' in GitHub repository ${FULL
 # Check if environment exists
 if ! gh api "repos/${FULL_REPO}/environments/${ENVIRONMENT}" &>/dev/null; then
     echo "Creating new environment: ${ENVIRONMENT}"
+    gh api --method PUT "repos/${FULL_REPO}/environments/${ENVIRONMENT}" \
+        --field wait_timer=0 \
+        --silent || {
+        echo "Failed to create environment ${ENVIRONMENT}. Check your permissions."
+        exit 1
+    }
 else
     echo "Environment ${ENVIRONMENT} already exists, updating secrets"
 fi
