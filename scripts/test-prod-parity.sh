@@ -20,15 +20,15 @@ fi
 compare_environments() {
   local TEST_NAME=$1
   local COMMAND=$2
-  
+
   echo -e "\n=== Testing: $TEST_NAME ==="
-  
+
   echo "Running in development environment..."
   docker-compose exec -T backend bash -c "$COMMAND" > $TEMP_DIR/dev_output.txt 2>&1 || echo "Command failed in dev"
-  
+
   echo "Running in production-like environment..."
   docker-compose run --rm backend-prod bash -c "$COMMAND" > $TEMP_DIR/prod_output.txt 2>&1 || echo "Command failed in prod"
-  
+
   echo "Comparing outputs..."
   if diff -q $TEMP_DIR/dev_output.txt $TEMP_DIR/prod_output.txt > /dev/null; then
     echo "✅ PASS: Outputs match"

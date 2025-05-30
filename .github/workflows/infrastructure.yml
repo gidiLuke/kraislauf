@@ -11,12 +11,7 @@ on:
       - 'infra/**'
   release:
     types: [published]
-  workflow_dis      - name: Apply changes
-        env:
-          TF_VAR_environment: ${{ vars.TF_VAR_environment }}
-          TF_VAR_project_name: ${{ vars.TF_VAR_project_name }}
-          TF_VAR_location: ${{ vars.TF_VAR_location }}
-        run: tofu apply -auto-approveh:  # Allows manual triggering
+  workflow_dispatch:  # Allows manual triggering
     inputs:
       environment:
         description: 'Environment to deploy to'
@@ -39,7 +34,7 @@ jobs:
     defaults:
       run:
         working-directory: ./infra
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -66,7 +61,7 @@ jobs:
     defaults:
       run:
         working-directory: ./infra
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -91,7 +86,7 @@ jobs:
 
       - name: Create plan
         run: tofu plan -out=tfplan
-        
+
       - name: Upload plan
         uses: actions/upload-artifact@v3
         with:
@@ -109,16 +104,16 @@ jobs:
           script: |
             const fs = require('fs');
             const plan = JSON.parse(fs.readFileSync('./infra/plan.json', 'utf8'));
-            
+
             let summary = "### OpenTofu Plan Summary\n\n";
-            
+
             if (plan.resource_changes) {
               const changes = {
                 add: 0,
                 change: 0,
                 destroy: 0
               };
-              
+
               plan.resource_changes.forEach(change => {
                 switch(change.change.actions[0]) {
                   case 'create':
@@ -132,16 +127,16 @@ jobs:
                     break;
                 }
               });
-              
+
               summary += `- Resources to add: ${changes.add}\n`;
               summary += `- Resources to change: ${changes.change}\n`;
               summary += `- Resources to destroy: ${changes.destroy}\n\n`;
             } else {
               summary += "No changes to apply.\n\n";
             }
-            
+
             summary += "For details, check the plan artifact in the workflow run.";
-            
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
@@ -158,7 +153,7 @@ jobs:
     defaults:
       run:
         working-directory: ./infra
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -197,7 +192,7 @@ jobs:
     defaults:
       run:
         working-directory: ./infra
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

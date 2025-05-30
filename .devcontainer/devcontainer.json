@@ -1,27 +1,80 @@
 {
-    "name": "kraislauf",
-    "build": {
-        "dockerfile": "../Dockerfile",
-        "target": "ide",
-        "context": ".."
-    },
-    "remoteUser": "root",
-    "workspaceMount": "source=${localWorkspaceFolder},target=/home/root/app,type=bind",
-    "workspaceFolder": "/home/root/app",
-    "customizations": {
-        "vscode": {
-            "extensions": [
-                "ms-python.python",
-                "charliermarsh.ruff",
-                "esbenp.prettier-vscode",
-                "ms-vscode.vscode-typescript-next"
-            ],
-            "settings": {
-                "python.defaultInterpreterPath": "/opt/venv/bin/python",
-                "editor.formatOnSave": true,
-                "typescript.tsdk": "node_modules/typescript/lib"
-            }
-        }
-    },
-    "postCreateCommand": "source backend/.venv/bin/activate && pre-commit install && pnpm install"
+  "name": "kraislauf-dev",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": "..",
+    "target": "ide"
+  },
+  "remoteUser": "vscode",
+  "workspaceFolder": "/home/vscode/app",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/app,type=bind",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-typescript-next",
+        "ms-azuretools.vscode-docker",
+        "hashicorp.terraform",
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        "github.vscode-github-actions",
+        "ms-azuretools.vscode-azureresourcegroups",
+        "ms-azuretools.vscode-azurestorage",
+        "ms-azuretools.vscode-cosmosdb",
+        "GitHub.copilot",
+        "GitHub.copilot-chat",
+        "streetsidesoftware.code-spell-checker",
+        "eamodio.gitlens",
+        "yzhang.markdown-all-in-one",
+        "bierner.markdown-preview-github-styles"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": "explicit",
+          "source.fixAll": "explicit"
+        },
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "git.autofetch": true,
+        "git.enableSmartCommit": true,
+        "[javascript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[typescript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[typescriptreact]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "cSpell.words": [
+          "kraislauf",
+          "fastapi",
+          "tailwindcss",
+          "pnpm",
+          "opentofu",
+          "azurerm",
+          "uvicorn"
+        ]
+      }
+    }
+  },
+  "forwardPorts": [3000, 8000],
+  "postCreateCommand": "sudo /home/vscode/app/.devcontainer/zsh-config.sh && sudo mkdir -p /usr/local/lib/python3.13/site-packages && sudo chmod -R 777 /usr/local/lib/python3.13 && cd backend && uv sync && cd ../frontend && export PNPM_HOME=\"$HOME/.local/share/pnpm\" && export PATH=\"$PNPM_HOME:$PATH\" && pnpm install && cd .. && pre-commit install",
+  "postStartCommand": "sudo /home/vscode/app/.devcontainer/zsh-config.sh",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "moby": true,
+      "dockerDashComposeVersion": "v2"
+    }
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.azure,target=/home/vscode/.azure,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,consistency=cached"
+  ]
 }

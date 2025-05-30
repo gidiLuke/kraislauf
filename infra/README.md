@@ -95,7 +95,7 @@ This section provides step-by-step instructions for setting up and managing the 
    ```bash
    # List subscriptions
    az account list --output table
-   
+
    # Select a subscription
    az account set --subscription "Your-Subscription-ID"
    ```
@@ -206,13 +206,13 @@ When switching between environments:
    ```bash
    # Setup production backend
    ./backend-config.sh prd
-   
+
    # Initialize with production backend config
    tofu init -reconfigure -backend-config=backend-prd.tfvars
-   
+
    # Set environment variable
    export TF_VAR_environment=prd
-   
+
    # Plan and apply changes
    tofu plan -out=prd-plan.out
    tofu apply prd-plan.out

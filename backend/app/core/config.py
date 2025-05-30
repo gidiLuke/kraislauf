@@ -1,7 +1,7 @@
+from typing import List
+
 from pydantic import Field
 from pydantic_settings import BaseSettings
-from typing import List
-import os
 
 
 class Settings(BaseSettings):
@@ -11,10 +11,7 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api"
 
     # CORS configuration
-    CORS_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000",
-                 "https://kraislauf.azurestaticwebapps.net"]
-    )
+    CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000", "https://kraislauf.azurestaticwebapps.net"])
 
     # Environment
     ENVIRONMENT: str = Field(default="development")
@@ -31,6 +28,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"
 
 
 settings = Settings()

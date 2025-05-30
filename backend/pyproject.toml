@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "kraislauf-backend"
 version = "0.1.0"
 description = "kraislauf backend API"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 license = {text = "MIT"}
 authors = [
     {name = "Lukas Heidegger"}
@@ -70,11 +70,13 @@ python_functions = "test_*"
 python_classes = "Test*"
 
 [tool.pyright]
+pythonVersion  = "3.13"
+analysis.extraPaths      = ["backend", "/usr/local/lib/python3.13/site-packages", "/usr/lib/python3/dist-packages"]
+analysis.autoSearchPaths = true
 include = ["app"]
 exclude = ["**/__pycache__", "tests", "**/node_modules", "**/.*"]
 reportMissingImports = true
 reportMissingTypeStubs = false
-pythonVersion = "3.12"
 pythonPlatform = "Linux"
 typeCheckingMode = "strict"
 useLibraryCodeForTypes = true
